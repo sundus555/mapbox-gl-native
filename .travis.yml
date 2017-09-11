@@ -127,8 +127,8 @@ matrix:
         - mapbox_start_xvfb
         - mapbox_export_mesa_library_path
       script:
-        - nvm install 6
-        - nvm use 6
+        - nvm install 6.11.2
+        - nvm use 6.11.2
         - make node
         - ./logbt -- $(scripts/mason.sh PREFIX apitrace VERSION 6a30de1)/bin/apitrace trace --api=egl -v make test-node
       after_script:
@@ -156,8 +156,8 @@ matrix:
         - mapbox_start_xvfb
         - mapbox_export_mesa_library_path
       script:
-        - nvm install 6
-        - nvm use 6
+        - nvm install 6.11.2
+        - nvm use 6.11.2
         - make node
         - ./logbt -- $(scripts/mason.sh PREFIX apitrace VERSION 6a30de1)/bin/apitrace trace --api=egl -v make test-node
       after_script:
