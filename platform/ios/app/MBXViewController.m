@@ -810,6 +810,7 @@ typedef NS_ENUM(NSInteger, MBXSettingsMiscellaneousRows) {
         }
 
         MGLPolygon *polygon = [MGLPolygon polygonWithCoordinates:polygonCoordinates count:[stateCoordinatePairs count]];
+        polygon.title = feature[@"properties"][@"NAME"];
 
         [self.mapView addAnnotation:polygon];
 

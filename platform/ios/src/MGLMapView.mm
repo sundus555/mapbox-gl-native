@@ -152,6 +152,8 @@ typedef std::unordered_map<MGLAnnotationTag, MGLAnnotationContext> MGLAnnotation
 /// Mapping from an annotation object to an annotation tag.
 typedef std::map<id<MGLAnnotation>, MGLAnnotationTag> MGLAnnotationObjectTagMap;
 
+static NSString *const  MGLShapeAnnotationLayerIdentifierPrefix = @"com.mapbox.annotations.shape.";
+
 mbgl::util::UnitBezier MGLUnitBezierForMediaTimingFunction(CAMediaTimingFunction *function)
 {
     if ( ! function)
@@ -3133,6 +3135,11 @@ public:
     }
 
     std::vector<MGLAnnotationTag> annotationTags = [self annotationTagsInRect:rect];
+    
+    if (!annotationTags.size()) {
+        annotationTags = [self shapeAnnotationTagsInRect:rect];
+    }
+    
     if (annotationTags.size())
     {
         NSMutableArray *annotations = [NSMutableArray arrayWithCapacity:annotationTags.size()];
@@ -3622,6 +3629,12 @@ public:
     queryRect = CGRectInset(queryRect, -MGLAnnotationImagePaddingForHitTest,
                             -MGLAnnotationImagePaddingForHitTest);
     std::vector<MGLAnnotationTag> nearbyAnnotations = [self annotationTagsInRect:queryRect];
+    BOOL queryingShapeAnnotations = NO;
+    
+    if (!nearbyAnnotations.size()) {
+        nearbyAnnotations = [self shapeAnnotationTagsInRect:queryRect];
+        queryingShapeAnnotations = YES;
+    }
 
     if (nearbyAnnotations.size())
     {
@@ -3629,54 +3642,58 @@ public:
         CGRect hitRect = CGRectInset({ point, CGSizeZero },
                                      -MGLAnnotationImagePaddingForHitTest,
                                      -MGLAnnotationImagePaddingForHitTest);
+        
+        if (!queryingShapeAnnotations) {
+            // Filter out any annotation whose image or view is unselectable or for which
+            // hit testing fails.
+            auto end = std::remove_if(nearbyAnnotations.begin(), nearbyAnnotations.end(),
+                                      [&](const MGLAnnotationTag annotationTag)
+                                      {
+                                          id <MGLAnnotation> annotation = [self annotationWithTag:annotationTag];
+                                          NSAssert(annotation, @"Unknown annotation found nearby tap");
+                                          if ( ! annotation)
+                                          {
+                                              return true;
+                                          }
+                                          
+                                          MGLAnnotationContext annotationContext = _annotationContextsByAnnotationTag.at(annotationTag);
+                                          CGRect annotationRect;
+                                          
+                                          MGLAnnotationView *annotationView = annotationContext.annotationView;
+                                          
+                                          if (annotationView)
+                                          {
+                                              if ( ! annotationView.enabled)
+                                              {
+                                                  return true;
+                                              }
+                                              
+                                              CGPoint calloutAnchorPoint = [self convertCoordinate:annotation.coordinate toPointToView:self];
+                                              CGRect frame = CGRectInset({ calloutAnchorPoint, CGSizeZero }, -CGRectGetWidth(annotationView.frame) / 2, -CGRectGetHeight(annotationView.frame) / 2);
+                                              annotationRect = UIEdgeInsetsInsetRect(frame, annotationView.alignmentRectInsets);
+                                          }
+                                          else
+                                          {
+                                              MGLAnnotationImage *annotationImage = [self imageOfAnnotationWithTag:annotationTag];
+                                              if ( ! annotationImage.enabled)
+                                              {
+                                                  return true;
+                                              }
+                                              
+                                              MGLAnnotationImage *fallbackAnnotationImage = [self dequeueReusableAnnotationImageWithIdentifier:MGLDefaultStyleMarkerSymbolName];
+                                              UIImage *fallbackImage = fallbackAnnotationImage.image;
+                                              
+                                              annotationRect = [self frameOfImage:annotationImage.image ?: fallbackImage centeredAtCoordinate:annotation.coordinate];
+                                          }
+                                          
+                                          // Filter out the annotation if the fattened finger didn’t land
+                                          // within the image’s alignment rect.
+                                          return !!!CGRectIntersectsRect(annotationRect, hitRect);
+                                      });
+            
+            nearbyAnnotations.resize(std::distance(nearbyAnnotations.begin(), end));
+        }
 
-        // Filter out any annotation whose image or view is unselectable or for which
-        // hit testing fails.
-        auto end = std::remove_if(nearbyAnnotations.begin(), nearbyAnnotations.end(),
-                                  [&](const MGLAnnotationTag annotationTag)
-        {
-            id <MGLAnnotation> annotation = [self annotationWithTag:annotationTag];
-            NSAssert(annotation, @"Unknown annotation found nearby tap");
-            if ( ! annotation)
-            {
-                return true;
-            }
-
-            MGLAnnotationContext annotationContext = _annotationContextsByAnnotationTag.at(annotationTag);
-            CGRect annotationRect;
-
-            MGLAnnotationView *annotationView = annotationContext.annotationView;
-            if (annotationView)
-            {
-                if ( ! annotationView.enabled)
-                {
-                    return true;
-                }
-
-                CGPoint calloutAnchorPoint = [self convertCoordinate:annotation.coordinate toPointToView:self];
-                CGRect frame = CGRectInset({ calloutAnchorPoint, CGSizeZero }, -CGRectGetWidth(annotationView.frame) / 2, -CGRectGetHeight(annotationView.frame) / 2);
-                annotationRect = UIEdgeInsetsInsetRect(frame, annotationView.alignmentRectInsets);
-            }
-            else
-            {
-                MGLAnnotationImage *annotationImage = [self imageOfAnnotationWithTag:annotationTag];
-                if ( ! annotationImage.enabled)
-                {
-                    return true;
-                }
-
-                MGLAnnotationImage *fallbackAnnotationImage = [self dequeueReusableAnnotationImageWithIdentifier:MGLDefaultStyleMarkerSymbolName];
-                UIImage *fallbackImage = fallbackAnnotationImage.image;
-
-                annotationRect = [self frameOfImage:annotationImage.image ?: fallbackImage centeredAtCoordinate:annotation.coordinate];
-            }
-
-            // Filter out the annotation if the fattened finger didn’t land
-            // within the image’s alignment rect.
-            return !!!CGRectIntersectsRect(annotationRect, hitRect);
-        });
-
-        nearbyAnnotations.resize(std::distance(nearbyAnnotations.begin(), end));
     }
 
     MGLAnnotationTag hitAnnotationTag = MGLAnnotationTagNotFound;
@@ -3759,6 +3776,32 @@ public:
     });
 }
 
+- (std::vector<MGLAnnotationTag>)shapeAnnotationTagsInRect:(CGRect)rect
+{
+    mbgl::ScreenBox screenBox = {
+        { CGRectGetMinX(rect), CGRectGetMinY(rect) },
+        { CGRectGetMaxX(rect), CGRectGetMaxY(rect) },
+    };
+    
+    std::vector<MGLAnnotationTag> nearbyAnnotations;
+    
+    mbgl::optional<std::vector<std::string>> optionalLayerIDs;
+    
+    if (_annotationTagsByAnnotation.size()) {
+        __block std::vector<std::string> layerIDs;
+        layerIDs.reserve(_annotationTagsByAnnotation.size());
+        NSString *layerID;
+        for (const auto &annotation : _annotationTagsByAnnotation) {
+            layerID = [NSString stringWithFormat:@"%@%u", MGLShapeAnnotationLayerIdentifierPrefix, annotation.second];
+            layerIDs.push_back(layerID.UTF8String);
+        }
+        optionalLayerIDs = layerIDs;
+        return nearbyAnnotations = _mbglMap->queryShapeAnnotations(screenBox, { optionalLayerIDs });
+    }
+            
+    return nearbyAnnotations;
+}
+
 - (id <MGLAnnotation>)selectedAnnotation
 {
     if (_userLocationAnnotationIsSelected)
@@ -3809,8 +3852,6 @@ public:
 - (void)selectAnnotation:(id <MGLAnnotation>)annotation animated:(BOOL)animated
 {
     if ( ! annotation) return;
-
-    if ([annotation isKindOfClass:[MGLMultiPoint class]]) return;
 
     if (annotation == self.selectedAnnotation) return;
 
@@ -3959,6 +4000,13 @@ public:
     if ( ! annotation)
     {
         return CGRectZero;
+    }
+    
+    if ([annotation isKindOfClass:[MGLMultiPoint class]]) {
+        CLLocationCoordinate2D origin = annotation.coordinate;
+        CGPoint originPoint = [self convertCoordinate:origin toPointToView:self];
+        return CGRectMake(originPoint.x, originPoint.y, MGLAnnotationImagePaddingForHitTest, MGLAnnotationImagePaddingForHitTest);
+        
     }
     UIImage *image = [self imageOfAnnotationWithTag:annotationTag].image;
     if ( ! image)
