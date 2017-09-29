@@ -143,6 +143,17 @@ public class LocationSource extends LocationEngine implements LocationListener {
   }
 
   /**
+   * Returns the location engine type which in this case is null because {@link LocationSource} is deprecated.
+   * Don't use it.
+   *
+   * @return null
+   */
+  @Override
+  public Type obtainEventType() {
+    return null;
+  }
+
+  /**
    * Invoked when the Location has changed.
    *
    * @param location the new location
