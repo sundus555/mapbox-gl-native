@@ -41,6 +41,10 @@
 
 @end
 
+@interface MGLMapSnapshotter()
+@property (nonatomic) MGLMapSnapshotOptions *options;
+@end
+
 @implementation MGLMapSnapshotter {
     
     std::shared_ptr<mbgl::ThreadPool> mbglThreadPool;
@@ -52,6 +56,7 @@
 {
     self = [super init];
     if (self) {
+        _options = options;
         _loading = false;
         
         mbgl::DefaultFileSource *mbglFileSource = [MGLOfflineStorage sharedOfflineStorage].mbglFileSource;
@@ -119,7 +124,11 @@
                     completion(nil, error);
                 });
             } else {
+#if TARGET_OS_IPHONE
+                MGLImage *mglImage = [[MGLImage alloc] initWithMGLPremultipliedImage:std::move(image) scale:self.options.scale];
+#else
                 MGLImage *mglImage = [[MGLImage alloc] initWithMGLPremultipliedImage:std::move(image)];
+#endif
                 
                 // Process image watermark in a work queue
                 dispatch_queue_t workQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
@@ -127,7 +136,7 @@
 #if TARGET_OS_IPHONE
                     UIImage *logoImage = [UIImage imageNamed:@"mapbox" inBundle:[NSBundle mgl_frameworkBundle] compatibleWithTraitCollection:nil];
                     
-                    UIGraphicsBeginImageContext(mglImage.size);
+                    UIGraphicsBeginImageContextWithOptions(mglImage.size, NO, [UIScreen mainScreen].scale);
                     
                     [mglImage drawInRect:CGRectMake(0, 0, mglImage.size.width, mglImage.size.height)];
                     [logoImage drawInRect:CGRectMake(8, mglImage.size.height - (8 + logoImage.size.height), logoImage.size.width,logoImage.size.height)];
