@@ -82,9 +82,9 @@ void CrossTileSymbolLayerIndex::addTile(const OverscaledTileID& coord, std::shar
     }
 
     // make this tile block duplicate labels in lower-res parent tiles
-    auto parentCoord = coord;
+    optional<OverscaledTileID> parentCoord = coord;
     for (auto z = coord.overscaledZ - 1; z >= minZoom; z--) {
-        //parentCoord = parentCoord.parent();
+        parentCoord = parentCoord->parent();
     }
     
     if (indexes.find(coord.overscaledZ) == indexes.end()) {
