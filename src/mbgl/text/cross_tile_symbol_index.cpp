@@ -4,7 +4,7 @@
 namespace mbgl {
 
 
-TileLayerIndex::TileLayerIndex(CanonicalTileID coord, std::shared_ptr<std::vector<SymbolInstance>> symbolInstances)
+TileLayerIndex::TileLayerIndex(OverscaledTileID coord, std::shared_ptr<std::vector<SymbolInstance>> symbolInstances)
     : coord(coord), symbolInstances(symbolInstances) {
         for (SymbolInstance& symbolInstance : *symbolInstances) {
             std::string key; // TODO use key from symbol instance
@@ -24,17 +24,17 @@ TileLayerIndex::TileLayerIndex(CanonicalTileID coord, std::shared_ptr<std::vecto
         //                                                             symbolInstance.iconOpacityState = new OpacityState();
     }
 
-Point<double> TileLayerIndex::getScaledCoordinates(SymbolInstance& symbolInstance, CanonicalTileID& childTileCoord) {
+Point<double> TileLayerIndex::getScaledCoordinates(SymbolInstance& symbolInstance, OverscaledTileID& childTileCoord) {
     // Round anchor positions to roughly 4 pixel grid
     const double roundingFactor = 512.0 / util::EXTENT / 2.0;
-    const double scale = roundingFactor / std::pow(2, childTileCoord.z - coord.z);
+    const double scale = roundingFactor / std::pow(2, childTileCoord.canonical.z - coord.canonical.z);
     return {
-        std::floor((childTileCoord.x * util::EXTENT + symbolInstance.anchor.point.x) * scale),
-        std::floor((childTileCoord.y * util::EXTENT + symbolInstance.anchor.point.y) * scale)
+        std::floor((childTileCoord.canonical.x * util::EXTENT + symbolInstance.anchor.point.x) * scale),
+        std::floor((childTileCoord.canonical.y * util::EXTENT + symbolInstance.anchor.point.y) * scale)
     };
 }
 
-optional<SymbolInstance> TileLayerIndex::getMatchingSymbol(SymbolInstance& childTileSymbol, CanonicalTileID& childTileCoord) {
+optional<SymbolInstance> TileLayerIndex::getMatchingSymbol(SymbolInstance& childTileSymbol, OverscaledTileID& childTileCoord) {
     std::string key; // TODO
 
     auto it = indexedSymbolInstances.find(key);
@@ -57,7 +57,7 @@ optional<SymbolInstance> TileLayerIndex::getMatchingSymbol(SymbolInstance& child
 CrossTileSymbolLayerIndex::CrossTileSymbolLayerIndex() {
 }
 
-void CrossTileSymbolLayerIndex::addTile(const CanonicalTileID& coord, std::shared_ptr<std::vector<SymbolInstance>> symbolInstances) {
+void CrossTileSymbolLayerIndex::addTile(const OverscaledTileID& coord, std::shared_ptr<std::vector<SymbolInstance>> symbolInstances) {
     uint8_t minZoom = 25;
     uint8_t maxZoom = 0;
     for (auto& it : indexes) {
@@ -69,8 +69,8 @@ void CrossTileSymbolLayerIndex::addTile(const CanonicalTileID& coord, std::share
     TileLayerIndex tileIndex(coord, symbolInstances);
 
     // make all higher-res child tiles block duplicate labels in this tile
-    for (auto z = maxZoom; z > coord.z; z--) {
-        auto zoomIndexes = indexes.find(coord.z);
+    for (auto z = maxZoom; z > coord.overscaledZ; z--) {
+        auto zoomIndexes = indexes.find(coord.overscaledZ);
         if (zoomIndexes != indexes.end()) {
             for (auto& childIndex : zoomIndexes->second) {
                 if (!childIndex.second.coord.isChildOf(coord)) continue;
@@ -83,15 +83,15 @@ void CrossTileSymbolLayerIndex::addTile(const CanonicalTileID& coord, std::share
 
     // make this tile block duplicate labels in lower-res parent tiles
     auto parentCoord = coord;
-    for (auto z = coord.z - 1; z >= minZoom; z--) {
+    for (auto z = coord.overscaledZ - 1; z >= minZoom; z--) {
         //parentCoord = parentCoord.parent();
     }
     
-    if (indexes.find(coord.z) == indexes.end()) {
-        indexes.emplace(coord.z, std::map<CanonicalTileID,TileLayerIndex>{});
+    if (indexes.find(coord.overscaledZ) == indexes.end()) {
+        indexes.emplace(coord.overscaledZ, std::map<OverscaledTileID,TileLayerIndex>{});
     }
 
-    indexes.at(coord.z).emplace(coord, std::move(tileIndex));
+    indexes.at(coord.overscaledZ).emplace(coord, std::move(tileIndex));
 
     /*
 
@@ -119,12 +119,12 @@ void CrossTileSymbolLayerIndex::addTile(const CanonicalTileID& coord, std::share
 void CrossTileSymbolLayerIndex::blockLabels(TileLayerIndex&, TileLayerIndex&, bool) {
 }
 
-void CrossTileSymbolLayerIndex::removeTile(const CanonicalTileID&) {
+void CrossTileSymbolLayerIndex::removeTile(const OverscaledTileID&) {
 }
 
 CrossTileSymbolIndex::CrossTileSymbolIndex() {}
 
-void CrossTileSymbolIndex::addTileLayer(std::string& layerId, const CanonicalTileID& coord, std::shared_ptr<std::vector<SymbolInstance>> symbolInstances) {
+void CrossTileSymbolIndex::addTileLayer(std::string& layerId, const OverscaledTileID& coord, std::shared_ptr<std::vector<SymbolInstance>> symbolInstances) {
     if (layerIndexes.find(layerId) == layerIndexes.end()) {
         layerIndexes.emplace(layerId, CrossTileSymbolLayerIndex{});
     }
@@ -133,7 +133,7 @@ void CrossTileSymbolIndex::addTileLayer(std::string& layerId, const CanonicalTil
     layerIndex.addTile(coord, symbolInstances);
 }
 
-void CrossTileSymbolIndex::removeTileLayer(std::string& layerId, const CanonicalTileID& coord) {
+void CrossTileSymbolIndex::removeTileLayer(std::string& layerId, const OverscaledTileID& coord) {
     auto it = layerIndexes.find(layerId);
     if (it != layerIndexes.end()) {
         it->second.removeTile(coord);

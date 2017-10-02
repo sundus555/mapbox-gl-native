@@ -23,12 +23,12 @@ class IndexedSymbolInstance {
 
 class TileLayerIndex {
     public:
-        TileLayerIndex(CanonicalTileID coord, std::shared_ptr<std::vector<SymbolInstance>>);
+        TileLayerIndex(OverscaledTileID coord, std::shared_ptr<std::vector<SymbolInstance>>);
 
-        Point<double> getScaledCoordinates(SymbolInstance&, CanonicalTileID&);
-        optional<SymbolInstance> getMatchingSymbol(SymbolInstance& childTileSymbol, CanonicalTileID& childTileCoord);
+        Point<double> getScaledCoordinates(SymbolInstance&, OverscaledTileID&);
+        optional<SymbolInstance> getMatchingSymbol(SymbolInstance& childTileSymbol, OverscaledTileID& childTileCoord);
         
-        CanonicalTileID coord;
+        OverscaledTileID coord;
     private:
         std::map<std::string,std::vector<IndexedSymbolInstance>> indexedSymbolInstances;
         std::shared_ptr<std::vector<SymbolInstance>> symbolInstances;
@@ -38,19 +38,19 @@ class CrossTileSymbolLayerIndex {
     public:
         CrossTileSymbolLayerIndex();
 
-        void addTile(const CanonicalTileID&, std::shared_ptr<std::vector<SymbolInstance>>);
-        void removeTile(const CanonicalTileID&);
+        void addTile(const OverscaledTileID&, std::shared_ptr<std::vector<SymbolInstance>>);
+        void removeTile(const OverscaledTileID&);
         void blockLabels(TileLayerIndex& childIndex, TileLayerIndex& parentIndex, bool copyParentOpacity);
     private:
-        std::map<uint8_t,std::map<CanonicalTileID,TileLayerIndex>> indexes;
+        std::map<uint8_t,std::map<OverscaledTileID,TileLayerIndex>> indexes;
 };
 
 class CrossTileSymbolIndex {
     public:
         CrossTileSymbolIndex();
 
-        void addTileLayer(std::string& layerId, const CanonicalTileID&, std::shared_ptr<std::vector<SymbolInstance>>);
-        void removeTileLayer(std::string& layerId, const CanonicalTileID&);
+        void addTileLayer(std::string& layerId, const OverscaledTileID&, std::shared_ptr<std::vector<SymbolInstance>>);
+        void removeTileLayer(std::string& layerId, const OverscaledTileID&);
     private:
         std::map<std::string,CrossTileSymbolLayerIndex> layerIndexes;
 };
