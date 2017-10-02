@@ -34,7 +34,7 @@ Point<double> TileLayerIndex::getScaledCoordinates(SymbolInstance& symbolInstanc
     };
 }
 
-optional<IndexedSymbolInstance> TileLayerIndex::getMatchingSymbol(SymbolInstance& childTileSymbol, CanonicalTileID& childTileCoord) {
+optional<SymbolInstance> TileLayerIndex::getMatchingSymbol(SymbolInstance& childTileSymbol, CanonicalTileID& childTileCoord) {
     std::string key; // TODO
 
     auto it = indexedSymbolInstances.find(key);
@@ -47,20 +47,79 @@ optional<IndexedSymbolInstance> TileLayerIndex::getMatchingSymbol(SymbolInstance
         // grid unit. (with a 4px grid, this covers a 12px by 12px area)
         if (std::fabs(thisTileSymbol.coord.x - childTileSymbolCoord.x) <= 1 &&
             std::fabs(thisTileSymbol.coord.y - childTileSymbolCoord.y) <= 1) {
-            //return {};
-            return { thisTileSymbol };
+            return { thisTileSymbol.instance };
         }
     }
 
     return {};
 }
 
-CrossTileSymbolLayerIndex::CrossTileSymbolLayerIndex() {}
-
-void CrossTileSymbolLayerIndex::addTile(const CanonicalTileID& coord, std::shared_ptr<std::vector<SymbolInstance>>) {
+CrossTileSymbolLayerIndex::CrossTileSymbolLayerIndex() {
 }
 
-void CrossTileSymbolLayerIndex::removeTile(const CanonicalTileID& coord) {
+void CrossTileSymbolLayerIndex::addTile(const CanonicalTileID& coord, std::shared_ptr<std::vector<SymbolInstance>> symbolInstances) {
+    uint8_t minZoom = 25;
+    uint8_t maxZoom = 0;
+    for (auto& it : indexes) {
+        auto z = it.first;
+        minZoom = std::min(minZoom, z);
+        maxZoom = std::max(maxZoom, z);
+    }
+
+    TileLayerIndex tileIndex(coord, symbolInstances);
+
+    // make all higher-res child tiles block duplicate labels in this tile
+    for (auto z = maxZoom; z > coord.z; z--) {
+        auto zoomIndexes = indexes.find(coord.z);
+        if (zoomIndexes != indexes.end()) {
+            for (auto& childIndex : zoomIndexes->second) {
+                if (!childIndex.second.coord.isChildOf(coord)) continue;
+                // Mark labels in this tile blocked, and don't copy opacity state
+                // into this tile
+                blockLabels(childIndex.second, tileIndex, false);
+            }
+        }
+    }
+
+    // make this tile block duplicate labels in lower-res parent tiles
+    auto parentCoord = coord;
+    for (auto z = coord.z - 1; z >= minZoom; z--) {
+        //parentCoord = parentCoord.parent();
+    }
+    
+    if (indexes.find(coord.z) == indexes.end()) {
+        indexes.emplace(coord.z, std::map<CanonicalTileID,TileLayerIndex>{});
+    }
+
+    indexes.at(coord.z).emplace(coord, std::move(tileIndex));
+
+    /*
+
+
+        // make this tile block duplicate labels in lower-res parent tiles
+        let parentCoord = coord;
+        for (let z = coord.z - 1; z >= minZoom; z--) {
+            parentCoord = (parentCoord: any).parent(sourceMaxZoom);
+            const parentIndex = this.indexes[z] && this.indexes[z][parentCoord.id];
+            if (parentIndex) {
+                // Mark labels in the parent tile blocked, and copy opacity state
+                // into this tile
+                this.blockLabels(tileIndex, parentIndex, true);
+            }
+        }
+
+        if (this.indexes[coord.z] === undefined) {
+            this.indexes[coord.z] = {};
+        }
+        this.indexes[coord.z][coord.id] = tileIndex;
+        */
+
+}
+
+void CrossTileSymbolLayerIndex::blockLabels(TileLayerIndex&, TileLayerIndex&, bool) {
+}
+
+void CrossTileSymbolLayerIndex::removeTile(const CanonicalTileID&) {
 }
 
 CrossTileSymbolIndex::CrossTileSymbolIndex() {}

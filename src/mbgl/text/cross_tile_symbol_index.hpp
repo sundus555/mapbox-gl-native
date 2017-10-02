@@ -24,10 +24,12 @@ class IndexedSymbolInstance {
 class TileLayerIndex {
     public:
         TileLayerIndex(CanonicalTileID coord, std::shared_ptr<std::vector<SymbolInstance>>);
+
         Point<double> getScaledCoordinates(SymbolInstance&, CanonicalTileID&);
-        optional<IndexedSymbolInstance> getMatchingSymbol(SymbolInstance& childTileSymbol, CanonicalTileID& childTileCoord);
-    private:
+        optional<SymbolInstance> getMatchingSymbol(SymbolInstance& childTileSymbol, CanonicalTileID& childTileCoord);
+        
         CanonicalTileID coord;
+    private:
         std::map<std::string,std::vector<IndexedSymbolInstance>> indexedSymbolInstances;
         std::shared_ptr<std::vector<SymbolInstance>> symbolInstances;
 };
@@ -38,8 +40,9 @@ class CrossTileSymbolLayerIndex {
 
         void addTile(const CanonicalTileID&, std::shared_ptr<std::vector<SymbolInstance>>);
         void removeTile(const CanonicalTileID&);
+        void blockLabels(TileLayerIndex& childIndex, TileLayerIndex& parentIndex, bool copyParentOpacity);
     private:
-        std::map<std::string,std::vector<TileLayerIndex>> layerIndexes;
+        std::map<uint8_t,std::map<CanonicalTileID,TileLayerIndex>> indexes;
 };
 
 class CrossTileSymbolIndex {
